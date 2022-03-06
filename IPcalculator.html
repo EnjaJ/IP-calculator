@@ -1,0 +1,370 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<title>Calculator IP</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    
+    	<meta name="Generator" content="Nokia WDE 3.2.0" />
+        <link rel="stylesheet" type="text/css" href="layout.css">
+
+<script type="text/javascript">
+
+
+	var nAddr = new Array(10,0,0,0);
+	var nMask = new Array(255,0,0,0);
+	
+	function displayInfo() {
+		try {
+			document.getElementById("network").value = nAddr[0]+"."+nAddr[1]+"."+nAddr[2]+"."+nAddr[3];
+			document.getElementById("mask").value = nMask[0]+"."+nMask[1]+"."+nMask[2]+"."+nMask[3];
+			var wc = wildcardMask(nMask);
+			document.getElementById("wildcard").value = wc[0]+"."+wc[1]+"."+wc[2]+"."+wc[3];
+			var cidr = octet2cidr(nMask);
+			document.getElementById("maskbits").value = cidr;
+			document.getElementById("bitmap").value = subnetBitmap(nAddr,nMask);
+			document.getElementById("hosts").value = hostCount(nMask);
+			var aSubnet = subnetID(nAddr,nMask);
+			document.getElementById("subnetID").value = aSubnet[0]+"."+aSubnet[1]+"."+aSubnet[2]+"."+aSubnet[3];
+			var aBcast = broadcast(nAddr,wc);
+			document.getElementById("broadcast").value = aBcast[0]+"."+aBcast[1]+"."+aBcast[2]+"."+aBcast[3];
+			var aStart = startingIP(nAddr,nMask);
+			document.getElementById("startIP").value = aStart[0]+"."+aStart[1]+"."+aStart[2]+"."+aStart[3];
+			var aEnd = endingIP(nAddr,wc);
+			document.getElementById("endIP").value = aEnd[0]+"."+aEnd[1]+"."+aEnd[2]+"."+aEnd[3];
+			populateMaskSelect( document.getElementById('maskSelect'), nAddr, nMask[0]+"."+nMask[1]+"."+nMask[2]+"."+nMask[3]);
+			populateHostsSelect( document.getElementById('hostsSelect'), nAddr,cidr);
+		} catch(e) {
+			if( confirm("Error: Debug the stack trace?") ) {
+				stackTrace(e);
+			}
+		}
+	}
+	function wildcardMask(aMask){
+		var a = new Array(0,0,0,0);
+		for(var i=0;i<4;i++){
+			a[i] = 255 - aMask[i];
+		}
+		return a;
+	}
+	function endingIP(aNet,aWild){
+		var a = new broadcast(aNet,aWild);
+		var d = octet2dec(a);
+		d = d-1;
+		return dec2octet(d);
+	}
+	function broadcast(aNet,aWild){
+		// work around int32
+		var a = new Array(0,0,0,0);
+		for(var i=0;i<4;i++){
+			a[i] = aNet[i] | aWild[i];
+		}
+		return a;
+	}
+	function startingIP(aNet,aMask){
+		var a = subnetID(aNet,aMask);
+		var d = octet2dec(a);
+		d = d+1;
+		return dec2octet(d);
+	}
+	function subnetID(aNet,aMask){
+		var a = new Array(0,0,0,0);
+		for(var i=0;i<4;i++){
+			a[i] = aNet[i] & aMask[i];
+		}
+		return a;
+	}
+	function hostCount(aMask) {
+		var bits = 32 - octet2cidr(aMask);
+		return Math.pow(2,bits) -2;
+	}
+	function octet2cidr(aMask) {
+		var mask = octet2dec(aMask);
+		mask = mask.toString(2);
+		return mask.indexOf(0);
+	}
+	function subnetBitmap(aNet,aMask){
+		var map = "";
+		var i = 0;
+		var cidr = octet2cidr(aMask);
+		if( aNet[0] >= 1 && aNet[0] <= 126 ) {
+			
+			map = "0nnnnnnn";
+			i = map.length;
+		} else if( aNet[0] >= 128 && aNet[0] <= 191 ){
+		
+			map = "10nnnnnn.nnnnnnnn";
+			i = map.length-1;
+		} else if( aNet[0] >= 192 && aNet[0] <= 223 ){
+		
+			map = "110nnnnn.nnnnnnnn.nnnnnnnn";
+			i = map.length-2;
+		}
+		
+		while(i < cidr) {
+			if(i%8 == 0) map+=".";
+			map += "s";
+			i++;
+		}
+		// host bits
+		while(i < 32) {
+			if(i%8 == 0) map+=".";
+			map += "h";
+			i++;
+		}
+
+		return map;
+	}
+	function cidr2octet(bits) {
+		var bits = parseInt(bits);
+		if( bits < 0 | bits > 32 ) {
+			alert("Invalid 32 bit DIDR mask.  You entered "+bits);
+			return false;
+		}
+		// make up our mask
+		var ones = "11111111111111111111111111111111";
+		var mask = parseInt(ones.substring(0,bits),2);
+		var shift = 32-bits;
+		mask = mask * Math.pow(2,shift);
+
+		return dec2octet(mask);
+	}
+	function octet2dec(a){
+		var d = 0;
+		d = d + parseInt(a[0]) * 16777216 ;
+		d = d + a[1] * 65536;	  
+		d = d + a[2] * 256;	 
+		d = d + a[3];
+		return d;
+	}
+	function dec2octet(d){
+		var zeros = "00000000000000000000000000000000";
+		var b = d.toString(2);
+		var b = zeros.substring(0,32-b.length) + b;
+		var a = new Array(
+			parseInt(b.substring(0,8),2)	
+			, (d & 16711680)/65536	 
+			, (d & 65280)/256		 
+			, (d & 255)
+			);		
+		return a;
+	}
+
+	function dec2bin(d) {
+		var b = d.toString(2);
+		return b;
+	}
+
+	function bin2dec(b) {
+		return parseInt(b,2);
+	}
+	function calculateClass( c ) {
+		switch(c)
+		{
+			case "B":
+				nAddr = new Array(172,168,0,1);
+				nMask = new Array(255,255,0,0);
+				break;
+			case "C":
+				nAddr = new Array(192,168,0,1);
+				nMask = new Array(255,255,255,0);
+				break;
+			default:
+				// default to class A
+				nAddr = new Array(10,0,0,1);
+				nMask = new Array(255,0,0,0);
+				break;
+		}
+		displayInfo();
+	}
+
+	function calculateIPCIDR(ip) {
+		
+
+		var ipa = ip.split('/');
+		if( ipa.length = 2 ) {
+			var a = ipa[0].split('.');
+			nAddr[0] = parseInt(a[0]);
+			nAddr[1] = parseInt(a[1]);
+			nAddr[2] = parseInt(a[2]);
+			nAddr[3] = parseInt(a[3]);
+			nMask = cidr2octet(ipa[1]);
+		} else {
+			nAddr = ip.split('.');
+		}
+		displayInfo();
+	}
+	
+	function calculateSubnet(mask) {
+		var a = mask.split('.');
+		nMask[0] = parseInt(a[0]);
+		nMask[1] = parseInt(a[1]);
+		nMask[2] = parseInt(a[2]);
+		nMask[3] = parseInt(a[3]);
+		displayInfo();
+	}
+	function calculateHosts(cidr) {
+		nMask = cidr2octet(cidr);
+		displayInfo();
+	}
+
+	function populateMaskSelect( s, aNet, maskString) {
+		s.length = 0;
+		var a = new Array(0,0,0,0);
+		var i = 0;
+		if( aNet[0] >= 1 && aNet[0] <= 126 ) {
+			
+			a[i++] = 255;
+		} else if( aNet[0] >= 128 && aNet[0] <= 191 ){
+		
+			a[i++] = 255;
+			a[i++] = 255;
+		} else if( aNet[0] >= 192 && aNet[0] <= 223 ){
+			
+			a[i++] = 255;
+			a[i++] = 255;
+			a[i++] = 255;
+		}
+
+		while( i < 4 ) {
+			var t = a[0]+"."+a[1]+"."+a[2]+"."+a[3];
+			addOption(s,t,t);
+			var pow = 7;
+			while(pow >= 0 && !(i==3 && pow<2 )) {
+				a[i] = a[i] + Math.pow(2,pow);
+				t = a[0]+"."+a[1]+"."+a[2]+"."+a[3];
+				addOption(s,t,t);
+				pow--;
+			}
+			i++;
+		}
+		selectOption(s,maskString);
+	}
+	function populateHostsSelect(s,aNet,cidr){
+		s.length = 0;
+		var pow = 8;
+		if( aNet[0] >= 1 && aNet[0] <= 126 ) {
+			pow = 24;
+		} else if( aNet[0] >= 128 && aNet[0] <= 191 ){
+			pow = 16;
+		} else if( aNet[0] >= 192 && aNet[0] <= 223 ){
+			pow = 8;
+		}
+		var t = 2;
+		while(pow > 2 ) {
+			t = Math.pow(2,pow) -2;
+			addOption(s,t,32-pow);
+			pow--;
+		}
+		selectOption(s,cidr);
+	}
+	function addOption(s,t,v){
+		var o = document.createElement('option');
+		o.text = t;
+		o.value = v;
+		try {
+			s.add(o, null); 
+		} catch(e) {
+			s.add(o); 
+		}
+	}
+	function selectOption(s,v){
+		for (var i=0;i<s.length;i++){
+			if(s[i].value == v){
+				s.selectedIndex = i;
+				break;
+			}
+		}
+	}
+	
+	
+	function stackTrace( e ) {
+		var r = '';
+		for (var p in e) {
+			r += p + ': ' + e[p] + '\n';
+		}
+		alert(r);
+	
+	}
+</script>
+
+<script type="text/javascript">
+	
+	function tableBuilder(div){
+		var d = document.getElementById(div);
+		d.innerHTML = "";
+		var t = document.createElement("table");
+		t.border = 1;
+		var b = document.createElement("tbody");
+		var r = null;
+		var c = null;
+		d.appendChild(t);
+		for(var i=0;i<10;i++) {
+			r = document.createElement("tr");
+			for(var j=0;j<8;j++){
+				c=document.createElement("td");
+				var txt = document.createTextNode(i+":"+j);
+				c.appendChild(txt);
+				r.appendChild(c);
+			}
+			b.appendChild(r);
+		}
+		t.appendChild(b);
+		d.appendChild(t);
+	}
+</script>
+
+	</head>
+	<body onload="calculateClass('A');">
+		<form name="SCForm" action="#" id="SCForm">
+
+	<div class="layout">
+	<table>
+	<tr><td>Class</td><td>
+		A<input type="radio" name="class" value="A" checked="true" onclick="calculateClass('A');" />
+		B<input type="radio" name="class" value="B" onclick="calculateClass('B');" />
+		C<input type="radio" name="class" value="C" onclick="calculateClass('C');" />
+	</td></tr>
+	<tr><td>Network IP</td><td>
+		<input id="network" type="text" onchange="calculateIPCIDR(this.value);" />
+	</td></tr>
+
+	<tr><td>Subnet Mask</td><td>
+		<input id="mask" type="text" onchange="calculateSubnet(this.value);" />
+		<select id="maskSelect" onchange="calculateSubnet(this.options[this.selectedIndex].value);"><option value="255.0.0.0">loading...</select>
+	</td></tr>
+	<tr><td>Wildcard Mask</td><td>
+		<input id="wildcard" type="text" readonly="readonly" />
+	</td></tr>
+
+	<tr><td>Mask Bits</td><td>
+		<input id="maskbits" type="text" readonly="readonly" />
+	</td></tr>
+	<tr><td>Hosts</td><td>
+		<input id="hosts" type="text" readonly="readonly" />
+		<select id="hostsSelect" onchange="calculateHosts(this.options[this.selectedIndex].value);"><option value="2">loading...</select>
+	</td></tr>
+
+	<tr><td>Subnet ID</td><td>
+		<input id="subnetID" type="text" readonly="readonly" />
+	</td></tr>
+	<tr><td>Start</td><td>
+		<input id="startIP" type="text" readonly="readonly" />
+	</td></tr>
+	<tr><td>End</td><td>
+
+		<input id="endIP" type="text" readonly="readonly" />
+	</td></tr>
+	<tr><td>Broadcast</td><td>
+		<input id="broadcast" type="text" readonly="readonly" />
+	</td></tr>
+
+	<tr><td>Bitmap</td><td>
+		<input id="bitmap" type="text" size="35" disabled="disabled" />
+	</td></tr>
+	
+	</table>
+	</div>
+	</form>
+	</body>
+</html>
